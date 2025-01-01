@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -14,6 +15,16 @@ import (
 
 type DB struct {
 	sqlx.DB
+}
+
+type SQLTime int64
+
+func (d SQLTime) Time() time.Time {
+	return time.Unix(0, int64(d))
+}
+
+func ToSQLTime(t time.Time) SQLTime {
+	return SQLTime(t.UnixNano())
 }
 
 func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
