@@ -151,8 +151,8 @@ type index struct {
 }
 
 var (
-	uniqueWithRegexp = regexp.MustCompile(`uniqueWith\\((.*)\\)`)
-	indexWithRegexp  = regexp.MustCompile(`indexWith\\((.*)\\)`)
+	uniqueWithRegexp = regexp.MustCompile(`uniqueWith\((.*)\)`)
+	indexWithRegexp  = regexp.MustCompile(`indexWith\((.*)\)`)
 )
 
 func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prototype any) error {
