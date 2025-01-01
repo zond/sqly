@@ -3,7 +3,6 @@ package sqly
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"regexp"
 	"strings"
@@ -102,7 +101,6 @@ func Upsert(ctx context.Context, execer sqlx.ExecerContext, structPointer any, o
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		log.Printf("setting pkey to %v", lastID)
 		primaryKeyFieldToSet.SetInt(lastID)
 	}
 	return nil

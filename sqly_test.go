@@ -101,13 +101,15 @@ func TestCRU(t *testing.T) {
 		if !reflect.DeepEqual(gotStr, wantStr) {
 			t.Errorf("got %+v, wanted %+v", gotStr, wantStr)
 		}
+		yeserr(t, db.Upsert(ctx, wantStr, false))
+		noerr(t, db.Upsert(ctx, wantStr, true))
 	})
 }
 
 func TextIndex(t *testing.T) {
 	withDB(t, func(db *DB) {
 		noerr(t, db.CreateTableIfNotExists(ctx, testStruct{}))
-		wantStr := &indexedTestStruct{
+		str := &indexedTestStruct{
 			Indexed:       1,
 			Unique:        2,
 			ThreeIndexed1: 1,
@@ -117,8 +119,40 @@ func TextIndex(t *testing.T) {
 			ThreeUnique2:  2,
 			ThreeUnique3:  3,
 		}
-		noerr(t, db.Upsert(ctx, wantStr, false))
-		wantStr.Id = 0
-		noerr(t, db.Upsert(ctx, wantStr, true))
+		noerr(t, db.Upsert(ctx, str, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			Indexed: 1,
+		}, false))
+		yeserr(t, db.Upsert(ctx, &indexedTestStruct{
+			Unique: 1,
+		}, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			Unique: 2,
+		}, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			ThreeIndexed1: 1,
+			ThreeIndexed2: 2,
+			ThreeIndexed3: 3,
+		}, false))
+		yeserr(t, db.Upsert(ctx, &indexedTestStruct{
+			ThreeUnique1: 1,
+			ThreeUnique2: 2,
+			ThreeUnique3: 3,
+		}, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			ThreeUnique1: 2,
+			ThreeUnique2: 2,
+			ThreeUnique3: 3,
+		}, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			ThreeUnique1: 1,
+			ThreeUnique2: 3,
+			ThreeUnique3: 3,
+		}, false))
+		noerr(t, db.Upsert(ctx, &indexedTestStruct{
+			ThreeUnique1: 1,
+			ThreeUnique2: 2,
+			ThreeUnique3: 4,
+		}, false))
 	})
 }
