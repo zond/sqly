@@ -206,19 +206,15 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 			for _, tag := range strings.Split(field.Tag.Get("sqly"), ",") {
 				switch tag {
 				case "unique":
-					index := index{
+					indices = append(indices, index{
 						cols:   []string{field.Name},
 						unique: true,
-					}
-					index.cols = append(index.cols, field.Name)
-					indices = append(indices, index)
+					})
 				case "index":
-					index := index{
+					indices = append(indices, index{
 						cols:   []string{field.Name},
 						unique: false,
-					}
-					index.cols = append(index.cols, field.Name)
-					indices = append(indices, index)
+					})
 				case "pkey":
 					isPkey = true
 					primaryKeyCol = field.Name
@@ -226,12 +222,12 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 				default:
 					if match := uniqueWithRegexp.FindStringSubmatch(tag); match != nil {
 						indices = append(indices, index{
-							cols:   strings.Split(match[1], ";"),
+							cols:   append([]string{field.Name}, strings.Split(match[1], ";")...),
 							unique: true,
 						})
 					} else if match = indexWithRegexp.FindStringSubmatch(tag); match != nil {
 						indices = append(indices, index{
-							cols:   strings.Split(match[1], ";"),
+							cols:   append([]string{field.Name}, strings.Split(match[1], ";")...),
 							unique: false,
 						})
 					}
