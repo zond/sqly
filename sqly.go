@@ -2,6 +2,7 @@ package sqly
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -15,6 +16,40 @@ type DB struct {
 	sqlx.DB
 }
 
+func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
+	tx, err := db.Beginy(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := f(tx); err != nil {
+		if err := tx.Rollback(); err != nil {
+			return errors.WithStack(err)
+		}
+		return errors.WithStack(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+func (db *DB) Read(ctx context.Context, f func(*Tx) error) error {
+	tx, err := db.BeginTxy(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := f(tx); err != nil {
+		if err := tx.Rollback(); err != nil {
+			return errors.WithStack(err)
+		}
+		return errors.WithStack(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
 func (db *DB) Upsert(ctx context.Context, structPointer any, overwrite bool) error {
 	return Upsert(ctx, db, structPointer, overwrite)
 }
@@ -23,12 +58,16 @@ func (db *DB) CreateTableIfNotExists(ctx context.Context, prototype any) error {
 	return CreateTableIfNotExists(ctx, db, prototype)
 }
 
-func (db *DB) Beginy() (*Tx, error) {
-	tx, err := db.Beginx()
+func (db *DB) BeginTxy(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	tx, err := db.BeginTxx(ctx, opts)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	return &Tx{*tx}, nil
+}
+
+func (db *DB) Beginy(ctx context.Context) (*Tx, error) {
+	return db.BeginTxy(ctx, nil)
 }
 
 type Tx struct {
