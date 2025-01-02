@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -15,6 +16,7 @@ import (
 
 type DB struct {
 	sqlx.DB
+	mutex sync.RWMutex
 }
 
 type SQLTime int64
@@ -28,6 +30,8 @@ func ToSQLTime(t time.Time) SQLTime {
 }
 
 func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	tx, err := db.Beginy(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -45,6 +49,8 @@ func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
 }
 
 func (db *DB) Read(ctx context.Context, f func(*Tx) error) error {
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	tx, err := db.BeginTxy(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return errors.WithStack(err)
@@ -103,7 +109,7 @@ func Open(driverName string, dataSourceName string) (*DB, error) {
 		return nil, err
 	}
 	db.MapperFunc(func(s string) string { return s })
-	return &DB{*db}, nil
+	return &DB{DB: *db}, nil
 }
 
 func Upsert(ctx context.Context, execer sqlx.ExecerContext, structPointer any, overwrite bool) error {
