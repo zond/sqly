@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"reflect"
 	"regexp"
 	"strings"
@@ -34,12 +33,12 @@ func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
 		return errors.WithStack(err)
 	}
 	if err := f(tx); err != nil {
-		if err := tx.Rollback(ctx); err != nil {
+		if err := tx.Rollback(); err != nil {
 			return errors.WithStack(err)
 		}
 		return errors.WithStack(err)
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
@@ -51,12 +50,12 @@ func (db *DB) Read(ctx context.Context, f func(*Tx) error) error {
 		return errors.WithStack(err)
 	}
 	if err := f(tx); err != nil {
-		if err := tx.Rollback(ctx); err != nil {
+		if err := tx.Rollback(); err != nil {
 			return errors.WithStack(err)
 		}
 		return errors.WithStack(err)
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
@@ -71,104 +70,19 @@ func (db *DB) CreateTableIfNotExists(ctx context.Context, prototype any) error {
 }
 
 func (db *DB) BeginTxy(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	switch opts.Isolation {
-	case sql.LevelDefault:
-	case sql.LevelSerializable:
-	case sql.LevelReadUncommitted:
-	default:
-		return nil, errors.Errorf("unsupported isolation level %v", opts.Isolation)
-	}
-	conn, err := db.Connx(ctx)
+	tx, err := db.BeginTxx(ctx, opts)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	result := &Tx{
-		Conn: *conn,
-	}
-	if _, err := conn.ExecContext(ctx, "BEGIN CONCURRENT"); err != nil {
-		return nil, result.finish(ctx, err)
-	}
-	if opts.Isolation == sql.LevelReadUncommitted {
-		if _, err := conn.ExecContext(ctx, "PRAGMA read_uncommitted = true"); err != nil {
-			return nil, result.finish(ctx, err)
-		}
-		result.readUncommited = true
-	}
-	if opts.ReadOnly {
-		if _, err := conn.ExecContext(ctx, "PRAGMA query_only = true"); err != nil {
-			return nil, result.finish(ctx, err)
-		}
-		result.readOnly = true
-	}
-	return result, nil
+	return &Tx{*tx}, nil
 }
 
 func (db *DB) Beginy(ctx context.Context) (*Tx, error) {
 	return db.BeginTxy(ctx, nil)
 }
 
-type txState int
-
-const (
-	wantClose txState = iota
-	wantCommit
-	wantRollback
-)
-
 type Tx struct {
-	sqlx.Conn
-	readUncommited bool
-	readOnly       bool
-	state          txState
-}
-
-func (t *Tx) finish(ctx context.Context, maybeErr error) error {
-	errs := []error{}
-	if maybeErr != nil {
-		errs = append(errs, maybeErr)
-	}
-	if t.readOnly {
-		if _, err := t.ExecContext(ctx, "PRAGMA query_only = false"); err != nil {
-			log.Printf("while resetting query_only to false: %v", err)
-			errs = append(errs, errors.WithStack(err))
-		}
-	}
-	if t.readUncommited {
-		if _, err := t.ExecContext(ctx, "PRAGMA read_uncommited = false"); err != nil {
-			log.Printf("while resetting read_uncommited to false: %v", err)
-			errs = append(errs, errors.WithStack(err))
-		}
-	}
-	switch t.state {
-	case wantCommit:
-		if _, err := t.ExecContext(ctx, "COMMIT"); err != nil {
-			log.Printf("while executing COMMIT: %v", err)
-			errs = append(errs, errors.WithStack(err))
-		}
-	case wantRollback:
-		if _, err := t.ExecContext(ctx, "ROLLBACK"); err != nil {
-			log.Printf("while executing ROLLBACK: %v", err)
-			errs = append(errs, errors.WithStack(err))
-		}
-	}
-	if err := t.Conn.Close(); err != nil {
-		log.Printf("while closing connection: %v", err)
-		errs = append(errs, errors.WithStack(err))
-	}
-	if len(errs) > 0 {
-		return errors.Errorf("%+v", errs)
-	}
-	return nil
-}
-
-func (tx *Tx) Commit(ctx context.Context) error {
-	tx.state = wantCommit
-	return tx.finish(ctx, nil)
-}
-
-func (tx *Tx) Rollback(ctx context.Context) error {
-	tx.state = wantRollback
-	return tx.finish(ctx, nil)
+	sqlx.Tx
 }
 
 func (tx *Tx) Upsert(ctx context.Context, structPointer any, overwrite bool) error {
