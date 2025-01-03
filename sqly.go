@@ -87,8 +87,20 @@ func (db *DB) Beginy(ctx context.Context) (*Tx, error) {
 	return db.BeginTxy(ctx, nil)
 }
 
+type isTxer interface {
+	isTx()
+}
+
+func IsTx(db sqlx.ExtContext) bool {
+	_, is := db.(isTxer)
+	return is
+}
+
 type Tx struct {
 	sqlx.Tx
+}
+
+func (tx *Tx) isTx() {
 }
 
 func (tx *Tx) Upsert(ctx context.Context, structPointer any, overwrite bool) error {
