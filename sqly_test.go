@@ -38,6 +38,7 @@ type testStruct struct {
 	Bool       bool
 	Float32    float32
 	Float64    float64
+	Blob       []byte
 }
 
 type indexedTestStruct struct {
@@ -87,6 +88,7 @@ func TestCRU(t *testing.T) {
 			Bool:       true,
 			Float32:    13.0,
 			Float64:    14.0,
+			Blob:       []byte("15"),
 		}
 		noerr(t, db.Upsert(ctx, wantStr, false))
 		if wantStr.Int == 0 {

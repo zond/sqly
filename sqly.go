@@ -228,6 +228,12 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 				sqlType = "REAL"
 			case reflect.Bool:
 				sqlType = "INTEGER"
+			case reflect.Slice:
+				if field.Type.Elem().Kind() == reflect.Uint8 {
+					sqlType = "BLOB"
+				} else {
+					return errors.Errorf("%v isn't of a supported slice type", field.Type.Elem())
+				}
 			default:
 				return errors.Errorf("%v isn't of a supported type", field)
 			}
