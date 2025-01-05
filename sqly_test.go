@@ -29,7 +29,7 @@ type testStruct struct {
 	Uint16     uint16
 	Uint32     uint32
 	Uint64     uint64
-	Int        int `sqly:"pkey"`
+	Int        int `sqly:"pkey,autoinc"`
 	Int8       int8
 	Int16      int16
 	Int32      int32

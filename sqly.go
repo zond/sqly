@@ -206,6 +206,7 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 	typ := val.Type()
 	primaryKeyCol := ""
 	primaryKeySQLType := ""
+	pkeyAutoInc := ""
 	cols := []string{}
 	sqlTypes := []string{}
 	indices := []index{}
@@ -252,6 +253,7 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 				return errors.Errorf("%v isn't of a supported type", field)
 			}
 			isPkey := false
+			autoIncrement := false
 			for _, tag := range strings.Split(field.Tag.Get("sqly"), ",") {
 				switch tag {
 				case "unique":
@@ -268,6 +270,8 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 					isPkey = true
 					primaryKeyCol = field.Name
 					primaryKeySQLType = sqlType
+				case "autoinc":
+					autoIncrement = true
 				default:
 					if match := uniqueWithRegexp.FindStringSubmatch(tag); match != nil {
 						indices = append(indices, index{
@@ -281,7 +285,17 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 						})
 					}
 				}
-				if !isPkey {
+				if isPkey {
+					if autoIncrement {
+						if sqlType != "INTEGER" {
+							return errors.Errorf("col %q can't be autoinc pkey if it's not an INTEGER type", field.Name)
+						}
+						pkeyAutoInc = " AUTOINCREMENT"
+					}
+				} else {
+					if autoIncrement {
+						return errors.Errorf("col %q can't be autoinc if it's not also pkey", field.Name)
+					}
 					cols = append(cols, field.Name)
 					sqlTypes = append(sqlTypes, sqlType)
 				}
@@ -291,7 +305,7 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 	if primaryKeyCol == "" {
 		return errors.Errorf("%v doesn't have a PRIMARY KEY (field tagged `sqly:\"pkey\"`)", prototype)
 	}
-	if _, err := execer.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (`%s` %s PRIMARY KEY)", typ.Name(), primaryKeyCol, primaryKeySQLType)); err != nil {
+	if _, err := execer.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (`%s` %s PRIMARY KEY%s)", typ.Name(), primaryKeyCol, primaryKeySQLType, pkeyAutoInc)); err != nil {
 		return withStack(err)
 	}
 	for colIndex, col := range cols {
