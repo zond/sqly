@@ -14,6 +14,20 @@ import (
 	"github.com/pkg/errors"
 )
 
+type stackTracer interface {
+	StackTrace() errors.StackTrace
+}
+
+func withStack(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(stackTracer); !ok {
+		return errors.WithStack(err)
+	}
+	return err
+}
+
 type DB struct {
 	sqlx.DB
 	mutex sync.RWMutex
@@ -34,16 +48,16 @@ func (db *DB) Write(ctx context.Context, f func(*Tx) error) error {
 	defer db.mutex.Unlock()
 	tx, err := db.Beginy(ctx)
 	if err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	if err := f(tx); err != nil {
 		if err := tx.Rollback(); err != nil {
-			return errors.WithStack(err)
+			return withStack(err)
 		}
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	if err := tx.Commit(); err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	return nil
 }
@@ -53,16 +67,16 @@ func (db *DB) Read(ctx context.Context, f func(*Tx) error) error {
 	defer db.mutex.RUnlock()
 	tx, err := db.BeginTxy(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	if err := f(tx); err != nil {
 		if err := tx.Rollback(); err != nil {
-			return errors.WithStack(err)
+			return withStack(err)
 		}
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	if err := tx.Commit(); err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	return nil
 }
@@ -78,7 +92,7 @@ func (db *DB) CreateTableIfNotExists(ctx context.Context, prototype any) error {
 func (db *DB) BeginTxy(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	tx, err := db.BeginTxx(ctx, opts)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, withStack(err)
 	}
 	return &Tx{*tx}, nil
 }
@@ -162,12 +176,12 @@ func Upsert(ctx context.Context, execer sqlx.ExecerContext, structPointer any, o
 	}
 	res, err := execer.ExecContext(ctx, fmt.Sprintf("INSERT %sINTO `%s` (%s) VALUES (%s)", replace, typ.Name(), strings.Join(cols, ","), strings.Join(qmarks, ",")), params...)
 	if err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	if primaryKeyFieldToSet != nil {
 		lastID, err := res.LastInsertId()
 		if err != nil {
-			return errors.WithStack(err)
+			return withStack(err)
 		}
 		primaryKeyFieldToSet.SetInt(lastID)
 	}
@@ -278,11 +292,11 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 		return errors.Errorf("%v doesn't have a PRIMARY KEY (field tagged `sqly:\"pkey\"`)", prototype)
 	}
 	if _, err := execer.ExecContext(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s` (`%s` %s PRIMARY KEY)", typ.Name(), primaryKeyCol, primaryKeySQLType)); err != nil {
-		return errors.WithStack(err)
+		return withStack(err)
 	}
 	for colIndex, col := range cols {
 		if _, err := execer.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", typ.Name(), col, sqlTypes[colIndex])); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			return errors.WithStack(err)
+			return withStack(err)
 		}
 	}
 	for _, index := range indices {
@@ -295,7 +309,7 @@ func CreateTableIfNotExists(ctx context.Context, execer sqlx.ExecerContext, prot
 			escapedCols[colIndex] = fmt.Sprintf("`%s`", col)
 		}
 		if _, err := execer.ExecContext(ctx, fmt.Sprintf("CREATE %sINDEX IF NOT EXISTS `%s.%s` ON `%s` (%s)", unique, typ.Name(), strings.Join(index.cols, ","), typ.Name(), strings.Join(escapedCols, ","))); err != nil {
-			return errors.WithStack(err)
+			return withStack(err)
 		}
 	}
 	return nil
